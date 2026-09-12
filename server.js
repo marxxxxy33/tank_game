@@ -5,9 +5,20 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
+// Статические файлы из папки public
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Резервный маршрут для отдачи index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 const players = {};
 
@@ -19,7 +30,6 @@ function getRandomSpawn() {
 }
 
 io.on('connection', (socket) => {
-  // Присоединение игрока с именем и выбранным танком
   socket.on('joinGame', (data) => {
     const spawn = getRandomSpawn();
     players[socket.id] = {
@@ -33,15 +43,11 @@ io.on('connection', (socket) => {
       hp: data.maxHp
     };
 
-    // Отправляем новому игроку его спавн и текущих игроков
     socket.emit('initPlayer', players[socket.id]);
     socket.emit('currentPlayers', players);
-
-    // Уведомляем остальных
     socket.broadcast.emit('newPlayer', players[socket.id]);
   });
 
-  // Перемещение и поворот
   socket.on('playerUpdate', (data) => {
     if (players[socket.id]) {
       players[socket.id].x = data.x;
@@ -52,7 +58,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Обработка выстрела (пересылаем всем остальным)
   socket.on('shoot', (bulletData) => {
     socket.broadcast.emit('playerShot', {
       shooterId: socket.id,
@@ -60,7 +65,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Обработка попадания и смерти
   socket.on('playerHit', (data) => {
     const target = players[data.targetId];
     if (target) {
@@ -69,10 +73,7 @@ io.on('connection', (socket) => {
         const killerName = players[socket.id] ? players[socket.id].name : 'Аноним';
         const victimName = target.name;
 
-        // Отправляем сообщение в киллчат
         io.emit('killEvent', { killer: killerName, victim: victimName });
-        
-        // Уведомляем погибшего игрока о смерти
         io.to(data.targetId).emit('youDied');
         
         delete players[data.targetId];
