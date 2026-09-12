@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tank Game 3D Multi-player</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      font-family: sans-serif;
+    }
+
+    /* Меню входа и смены танка */
+    #menu {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.85);
+      padding: 25px 40px;
+      border-radius: 0;
+      border: 1px solid #444;
+      z-index: 100;
+    }
+
+    #menu h1 {
+      margin-bottom: 15px;
+      font-size: 24px;
+    }
+
+    #player-name-input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 20px;
+      background: #111;
+      border: 1px solid #555;
+      color: #fff;
+      font-size: 14px;
+      text-align: center;
+      outline: none;
+    }
+
+    .tank-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .tank-buttons button {
+      padding: 10px 20px;
+      font-size: 14px;
+      color: #fff;
+      background: #333;
+      border: 1px solid #666;
+      cursor: pointer;
+    }
+
+    .tank-buttons button:hover {
+      background: #555;
+    }
+
+    /* ХП бар СЛЕВА ВНИЗУ (красный, ровные углы) */
+    #hud {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 250px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 6px;
+      border-radius: 0;
+      border: 1px solid #444;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #hp-bar-bg {
+      width: 100%;
+      height: 18px;
+      background: #222;
+      border-radius: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #hp-bar {
+      height: 100%;
+      width: 100%;
+      background: #e74c3c;
+      border-radius: 0;
+      transition: width 0.1s linear;
+    }
+
+    #hp-text {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      top: 1px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 1px 1px 1px #000;
+    }
+
+    /* Киллчат СПРАВА ВНИЗУ */
+    #kill-feed {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 5px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .kill-message {
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 6px 12px;
+      border-right: 3px solid #e74c3c;
+      font-size: 13px;
+      animation: fadeOut 5s forwards;
+    }
+
+    .kill-message .killer { color: #00ffcc; font-weight: bold; }
+    .kill-message .victim { color: #ff4444; font-weight: bold; }
+
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    /* Прицел без свечения */
+    #crosshair {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 30px;
+      height: 30px;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 9999;
+    }
+
+    #crosshair .line {
+      position: absolute;
+      background-color: #ff0000;
+    }
+
+    #crosshair .hor { top: 14px; left: 0; width: 30px; height: 2px; }
+    #crosshair .ver { top: 0; left: 14px; width: 2px; height: 30px; }
+    #crosshair .dot {
+      position: absolute; top: 13px; left: 13px;
+      width: 4px; height: 4px; background-color: #ff0000; border-radius: 50%;
+    }
+
+    /* Перезарядка */
+    #reload-indicator {
+      position: absolute;
+      top: 0; left: 0;
+      width: 36px; height: 36px;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 9998;
+    }
+
+    #reload-indicator svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    #reload-indicator circle { fill: none; stroke-width: 3; }
+    .bg-circle { stroke: rgba(255, 255, 255, 0.2); }
+    #reload-progress {
+      stroke: #00ffcc; stroke-dasharray: 87.96; stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.05s linear;
+    }
+  </style>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Меню входа -->
+  <div id="menu">
+    <h1 id="menu-title">Введите имя и выберите танк</h1>
+    <input type="text" id="player-name-input" placeholder="Ваш никнейм" maxlength="15" value="Игрок">
+    <div class="tank-buttons">
+      <button onclick="selectTank('heavy')">Тяжелый</button>
+      <button onclick="selectTank('medium')">Средний</button>
+      <button onclick="selectTank('light')">Легкий</button>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hp-bar-bg">
+      <div id="hp-bar"></div>
+      <div id="hp-text">100 / 100</div>
+    </div>
+  </div>
+
+  <!-- Киллчат -->
+  <div id="kill-feed"></div>
+
+  <!-- Прицел -->
+  <div id="crosshair">
+    <div class="line hor"></div>
+    <div class="line ver"></div>
+    <div class="dot"></div>
+  </div>
+
+  <!-- Перезарядка -->
+  <div id="reload-indicator">
+    <svg viewBox="0 0 36 36">
+      <circle class="bg-circle" cx="18" cy="18" r="14"></circle>
+      <circle id="reload-progress" cx="18" cy="18" r="14"></circle>
+    </svg>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
